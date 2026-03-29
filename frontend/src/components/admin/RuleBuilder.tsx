@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Settings, Plus, GripVertical, Save, HandMetal } from "lucide-react";
+import { Settings, Plus, GripVertical, Save, HandMetal, BadgeCheck } from "lucide-react";
 import {
   DndContext,
   closestCenter,

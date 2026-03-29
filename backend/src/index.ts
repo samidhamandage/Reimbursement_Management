@@ -2,38 +2,18 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
 import { authRouter } from "./routes/auth";
 import { expensesRouter } from "./routes/expenses";
 import { usersRouter } from "./routes/users";
 import { rulesRouter } from "./routes/rules";
 import { errorHandler } from "./middleware/errorHandler";
+import { initSocket } from "./lib/socket";
 
 const app = express();
 const httpServer = createServer(app);
 
 // ─── Socket.IO ─────────────────────────────────────────────────────────────
-export const io = new SocketIOServer(httpServer, {
-  cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
-
-io.on("connection", (socket) => {
-  console.log(`🔌  Socket connected: ${socket.id}`);
-
-  // Join room by role for targeted broadcasts
-  socket.on("join_room", (room: string) => {
-    socket.join(room);
-    console.log(`   ↳ ${socket.id} joined room: ${room}`);
-  });
-
-  socket.on("disconnect", () => {
-    console.log(`❌  Socket disconnected: ${socket.id}`);
-  });
-});
+export const io = initSocket(httpServer);
 
 // ─── Middleware ─────────────────────────────────────────────────────────────
 app.use(cors({

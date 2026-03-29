@@ -2,7 +2,7 @@ import { Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { AuthRequest } from "../middleware/auth";
-import { io } from "../index";
+import { io } from "../lib/socket";
 
 const createExpenseSchema = z.object({
   description: z.string().min(3),

@@ -1,15 +1,14 @@
 import { Router } from "express";
-import * as rulesController from "../controllers/rules";
+import * as usersController from "../controllers/users";
 import { authenticate, requireRole } from "../middleware/auth";
 
-export const rulesRouter = Router();
+export const usersRouter = Router();
 
-// Only Admins can manage rules
-rulesRouter.use(authenticate, requireRole("ADMIN"));
+// Only Admins can manage users
+usersRouter.use(authenticate, requireRole("ADMIN"));
 
-rulesRouter.get("/", rulesController.getRules);
-rulesRouter.get("/:id", rulesController.getRuleById);
-rulesRouter.post("/", rulesController.createRule);
-rulesRouter.put("/:id", rulesController.updateRule);
-rulesRouter.delete("/:id", rulesController.deleteRule);
-rulesRouter.patch("/:id/toggle", rulesController.toggleRule);
+usersRouter.get("/", usersController.getUsers);
+usersRouter.get("/:id", usersController.getUserById);
+usersRouter.post("/", usersController.createUser);
+usersRouter.put("/:id", usersController.updateUser);
+usersRouter.delete("/:id", usersController.deleteUser);

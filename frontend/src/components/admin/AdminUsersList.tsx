@@ -61,8 +61,8 @@ export function AdminUsersList() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"ADMIN" | "MANAGER" | "EMPLOYEE">("EMPLOYEE");
-  const [managerId, setManagerId] = useState("");
+  const [role, setRole] = useState<UserRole>("EMPLOYEE");
+  const [managerId, setManagerId] = useState("none");
 
   const managers = users.filter(u => u.role === "MANAGER" || u.role === "ADMIN");
 
@@ -71,7 +71,7 @@ export function AdminUsersList() {
     setEmail("");
     setPassword("");
     setRole("EMPLOYEE");
-    setManagerId("");
+    setManagerId("none");
   };
 
   const handleOpenAdd = () => {
@@ -85,7 +85,7 @@ export function AdminUsersList() {
     setEmail(user.email);
     setPassword(""); // don't show existing
     setRole(user.role);
-    setManagerId(user.managerId || "");
+    setManagerId(user.managerId || "none");
     setEditingUser(user);
     setIsAddMode(true);
   };
@@ -219,7 +219,7 @@ export function AdminUsersList() {
               </div>
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={role} onValueChange={(v: "ADMIN" | "MANAGER" | "EMPLOYEE" | null) => v && setRole(v)}>
+                <Select value={role} onValueChange={(v) => v && setRole(v as UserRole)}>
                   <SelectTrigger className="bg-background/50 h-10">
                     <SelectValue />
                   </SelectTrigger>
@@ -248,7 +248,11 @@ export function AdminUsersList() {
               <Label>Reports To (Manager)</Label>
               <Select value={managerId} onValueChange={(v) => v && setManagerId(v)}>
                 <SelectTrigger className="bg-background/50 h-10">
-                  <SelectValue placeholder="No Manager Selected" />
+                  <SelectValue placeholder="No Manager Selected">
+                    {managerId && managerId !== "none" ? (
+                      users.find(u => u.id === managerId)?.name
+                    ) : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none" className="text-muted-foreground italic">None</SelectItem>

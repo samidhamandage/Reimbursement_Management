@@ -35,6 +35,7 @@ import { Settings2, ArrowDownUp, CheckCircle2, Search, XCircle, MoreVertical } f
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -154,14 +155,16 @@ export function AdminExpensesList() {
                           <MoreVertical className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Admin Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => { setSelectedExpense(expense); setOverrideStatus("APPROVED"); }} className="text-green-500 cursor-pointer">
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Force Approve
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => { setSelectedExpense(expense); setOverrideStatus("REJECTED"); }} className="text-destructive cursor-pointer">
-                            <XCircle className="mr-2 h-4 w-4" /> Force Reject
-                          </DropdownMenuItem>
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel>Admin Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => { setSelectedExpense(expense); setOverrideStatus("APPROVED"); }} className="text-green-500 cursor-pointer">
+                              <CheckCircle2 className="mr-2 h-4 w-4" /> Force Approve
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setSelectedExpense(expense); setOverrideStatus("REJECTED"); }} className="text-destructive cursor-pointer">
+                              <XCircle className="mr-2 h-4 w-4" /> Force Reject
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
