@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AuthRequest } from "../middleware/auth";
 
@@ -75,7 +76,7 @@ export const updateRule = async (req: AuthRequest, res: Response) => {
 
   const { steps, ...ruleData } = parsed.data;
 
-  const rule = await prisma.$transaction(async (tx) => {
+  const rule = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Replace steps by deleting old ones first
     await tx.approvalStep.deleteMany({ where: { ruleId: id } });
     

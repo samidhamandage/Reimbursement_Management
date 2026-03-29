@@ -90,7 +90,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
   }
 
   const data = parsed.data;
-  let ruleId = data.ruleId;
+  let ruleId: string | null | undefined = data.ruleId;
   
   if (!ruleId) {
     try {
@@ -173,7 +173,7 @@ export const approveExpense = async (req: AuthRequest, res: Response) => {
   } else {
     // Check if user is an authorized approver for this rule
     const isDirectManager = rule.includeDirectManager && currentUser.id === expense.employee.managerId;
-    const isInSequence = rule.steps.some(s => s.userId === currentUser.id);
+    const isInSequence = rule.steps.some((s: any) => s.userId === currentUser.id);
     const isOverrideApprover = rule.overrideApproverId === currentUser.id;
 
     if (currentUser.role !== "ADMIN" && !isDirectManager && !isInSequence && !isOverrideApprover) {

@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 
@@ -72,7 +73,7 @@ rulesRouter.put("/:id", async (req: AuthRequest, res: Response): Promise<void> =
 
   const { steps, ...ruleData } = parsed.data;
 
-  const rule = await prisma.$transaction(async (tx) => {
+  const rule = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.approvalStep.deleteMany({ where: { ruleId: id } });
     return tx.approvalRule.update({
       where: { id },

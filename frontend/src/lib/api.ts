@@ -3,7 +3,7 @@
  * All frontend modules should import from here instead of calling fetch directly.
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -37,7 +37,7 @@ async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
     return await fetch(url, init);
   } catch (error) {
     if (error instanceof TypeError && error.message.toLowerCase().includes("fetch")) {
-      throw new Error("Backend server is unreachable. Please ensure the backend is running on http://localhost:5000 and check CORS settings.");
+      throw new Error("Backend server is unreachable. Please ensure the backend is running on http://localhost:5001 and check CORS settings.");
     }
     throw error;
   }

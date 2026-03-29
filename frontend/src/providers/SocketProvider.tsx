@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
+import { useAuth } from "./AuthProvider";
 
 type SocketContextType = {
   socket: Socket | null;
@@ -19,15 +20,16 @@ export const useSocket = () => useContext(SocketContext);
 export function SocketProvider({ children }: { children: ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const { token, user } = useAuth();
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    if (!token) return;
 
     const socketInstance = io(
-      process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000",
+      process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5001",
       {
         autoConnect: true,
-        auth: token ? { token } : undefined,
+        auth: { token },
         transports: ["websocket", "polling"],
       }
     );
@@ -37,17 +39,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       console.log("🔌 Socket connected:", socketInstance.id);
 
       // Join role-based room so backend can broadcast targeted events
-      const userStr = typeof window !== "undefined" ? localStorage.getItem("auth_user") : null;
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          // Join role room (e.g., "MANAGER", "ADMIN") for broadcast
-          socketInstance.emit("join_room", user.role);
-          // Join personal room for targeted notifications
-          socketInstance.emit("join_room", user.id);
-        } catch (_) {
-          // ignore
-        }
+      if (user) {
+        socketInstance.emit("join_room", user.role);
+        socketInstance.emit("join_room", user.id);
       }
     });
 
@@ -86,7 +80,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     return () => {
       socketInstance.disconnect();
     };
-  }, []);
+  }, [token, user]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>
