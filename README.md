@@ -41,8 +41,8 @@ SERMS uses AI-based OCR (Tesseract) to extract data from receipts, automatically
 
 - [x] **Multi-currency Support**: Automatic conversion using real-time exchange rates.
 - [x] **Offline Resilience**: Session caching and restoration when the backend drops connection.
-- [ ] **Advanced OCR**: Enhance extraction accuracy for handwritten receipts.
-- [ ] **Email Alerts**: Automatic email notifications for pending approvals.
+- [x] **Advanced OCR**: Enhance extraction accuracy for handwritten receipts.
+- [x] **Email Alerts**: Automatic email notifications for pending approvals.
 - [ ] **Cloud Storage**: Integrate AWS S3/Google Cloud Storage for receipt images.
 
 ## Installation & Setup
