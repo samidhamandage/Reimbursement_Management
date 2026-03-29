@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { AuthRequest } from "../middleware/auth";
 import { io } from "../lib/socket";
+import { runApprovalEngine } from "../lib/approvalEngine";
 
 const createExpenseSchema = z.object({
   description: z.string().min(3),
@@ -30,22 +31,19 @@ export const getExpenses = async (req: AuthRequest, res: Response) => {
   if (role === "EMPLOYEE") {
     where.employeeId = userId;
   } else if (role === "MANAGER") {
-    const reports = await prisma.user.findMany({
-      where: { managerId: userId },
-      select: { id: true },
-    });
-    where.employeeId = { in: reports.map((r) => r.id) };
+    where.OR = [
+      { employee: { managerId: userId } },
+      { rule: { steps: { some: { userId } } } },
+      { rule: { specificApproverId: userId } }
+    ];
   }
 
   const expenses = await prisma.expense.findMany({
     where,
     include: {
-      employee: { select: { id: true, name: true, email: true, role: true } },
-      approvalLogs: {
-        include: { approver: { select: { id: true, name: true } } },
-        orderBy: { step: "asc" },
-      },
-      rule: { select: { id: true, name: true } },
+      employee: { select: { id: true, name: true, email: true, managerId: true } },
+      approvalLogs: { include: { approver: { select: { name: true } } } },
+      rule: { include: { steps: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -151,47 +149,52 @@ export const approveExpense = async (req: AuthRequest, res: Response) => {
 
   const { comment } = parsed.data;
   const expenseId = req.params.id as string;
+  const currentUser = req.user!;
 
   const expense = await prisma.expense.findUnique({
     where: { id: expenseId },
     include: {
       rule: { include: { steps: { orderBy: { order: "asc" } } } },
       approvalLogs: true,
-      employee: { select: { id: true, name: true } },
+      employee: { select: { id: true, name: true, managerId: true } },
     },
   });
 
   if (!expense) return res.status(404).json({ error: "Expense not found" });
   if (expense.status !== "WAITING_APPROVAL") return res.status(400).json({ error: `Already ${expense.status}` });
 
-  const currentStep = expense.approvalLogs.length + 1;
-  const totalSteps = expense.rule?.steps.length ?? 1;
+  // ─── Strict Authorization & Rules ──────────────────────────────────────────
+  const rule = expense.rule;
+  if (!rule) {
+    // Fallback: If no rule, only Admins or Direct Managers can approve
+    if (currentUser.role !== "ADMIN" && currentUser.id !== expense.employee.managerId) {
+      return res.status(403).json({ error: "Strict: Direct Manager or Admin required for this expense." });
+    }
+  } else {
+    // Check if user is an authorized approver for this rule
+    const isDirectManager = rule.includeDirectManager && currentUser.id === expense.employee.managerId;
+    const isInSequence = rule.steps.some(s => s.userId === currentUser.id);
+    const isOverrideApprover = rule.overrideApproverId === currentUser.id;
 
-  await prisma.approvalLog.create({
-    data: { expenseId: expense.id, approverId: req.user!.id, action: "APPROVED", comment, step: currentStep },
-  });
-
-  const newStatus = (currentStep >= totalSteps || req.user!.role === "ADMIN") ? "APPROVED" : "WAITING_APPROVAL";
-
-  const updated = await prisma.expense.update({
-    where: { id: expense.id },
-    data: { status: newStatus },
-    include: { employee: { select: { id: true, name: true } } },
-  });
-
-  if (newStatus === "APPROVED") {
-    io.to(updated.employee.id).emit("expense_approved", {
-      id: updated.id,
-      description: updated.description,
-      approver: req.user!.name,
-    });
+    if (currentUser.role !== "ADMIN" && !isDirectManager && !isInSequence && !isOverrideApprover) {
+      return res.status(403).json({ error: "Strict: You are not an authorized approver for this rule." });
+    }
   }
 
-  res.json({ expense: updated });
+  // ─── Record Approval ───────────────────────────────────────────────────────
+  const currentStep = expense.approvalLogs.length + 1;
+  await prisma.approvalLog.create({
+    data: { expenseId: expense.id, approverId: currentUser.id, action: "APPROVED", comment, step: currentStep },
+  });
+
+  // ─── Hand-off to Core Engine ─────────────────────────────────────────────
+  await runApprovalEngine(expense.id);
+
+  res.json({ message: "Approval recorded. Flow engine triggered." });
 };
 
 /**
- * Reject an expense (Manager/Admin)
+ * Reject an expense
  */
 export const rejectExpense = async (req: AuthRequest, res: Response) => {
   const parsed = actionSchema.safeParse(req.body);
@@ -225,6 +228,55 @@ export const rejectExpense = async (req: AuthRequest, res: Response) => {
     description: updated.description,
     rejectionReason: comment,
     rejectedBy: req.user!.name,
+  });
+
+  res.json({ expense: updated });
+};
+
+/**
+ * Administrative override: Forcefully change expense status (Admin only)
+ */
+export const updateExpenseStatus = async (req: AuthRequest, res: Response) => {
+  const expenseId = req.params.id as string;
+  const { status, comment } = req.body;
+
+  if (!["APPROVED", "REJECTED"].includes(status)) {
+    return res.status(400).json({ error: "Invalid status for override" });
+  }
+
+  const expense = await prisma.expense.findUnique({
+    where: { id: expenseId },
+    include: { employee: true },
+  });
+
+  if (!expense) return res.status(404).json({ error: "Expense not found" });
+
+  const updated = await prisma.expense.update({
+    where: { id: expenseId },
+    data: { 
+      status, 
+      rejectionReason: status === "REJECTED" ? (comment || "Overridden by Admin") : null 
+    },
+    include: { employee: { select: { id: true, name: true } } },
+  });
+
+  // Log the administrative action in a special way
+  await prisma.approvalLog.create({
+    data: {
+      expenseId,
+      approverId: req.user!.id,
+      action: status === "APPROVED" ? "APPROVED" : "REJECTED",
+      comment: comment || `Administrative Override to ${status}`,
+      step: 99, // 99 indicates an out-of-band admin action
+    },
+  });
+
+  // Notify Employee
+  io.to(updated.employee.id).emit(status === "APPROVED" ? "expense_approved" : "expense_rejected", {
+    id: updated.id,
+    description: updated.description,
+    approver: req.user!.name,
+    rejectionReason: status === "REJECTED" ? (comment || "Overridden by Admin") : undefined,
   });
 
   res.json({ expense: updated });

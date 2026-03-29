@@ -13,3 +13,4 @@ expensesRouter.post("/", expensesController.createExpense);
 // Approval actions
 expensesRouter.patch("/:id/approve", requireRole("MANAGER", "ADMIN"), expensesController.approveExpense);
 expensesRouter.patch("/:id/reject", requireRole("MANAGER", "ADMIN"), expensesController.rejectExpense);
+expensesRouter.patch("/:id/status", requireRole("ADMIN"), expensesController.updateExpenseStatus);

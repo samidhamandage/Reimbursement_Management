@@ -73,43 +73,74 @@ export function ExpenseForm({ onSubmit }: { onSubmit: () => void }) {
 
   const processOCR = async (file: File) => {
     setIsScanning(true);
-    toast("Scanning receipt with AI...");
+    toast("AI scanning receipt with optimized parser...");
     try {
-      // Using generic eng lang.
-      const result = await Tesseract.recognize(file, 'eng', {
-        logger: m => console.log(m)
-      });
+      const result = await Tesseract.recognize(file, 'eng');
       const text = result.data.text;
       
-      // Heuristic extraction
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+      const lines = text.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 2 && !/^[\=\-\_\. ]+$/.test(l));
       
-      // Very naive merchant extraction (assume first line is merchant)
-      if (lines.length > 0 && !description) {
-        setDescription(lines[0]);
+      // 1. Smart Merchant Extraction
+      // Skip generic headers and dates
+      const genericHeaders = ["RECEIPT", "INVOICE", "WELCOME", "TAX", "CASH", "ORDER", "SALE"];
+      let merchant = "";
+      for (const line of lines) {
+        const isGeneric = genericHeaders.some(h => line.toUpperCase().includes(h));
+        const isDate = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/.test(line);
+        const isPhone = /\d{3,}/.test(line) && (line.includes("-") || line.includes("("));
+        
+        if (!isGeneric && !isDate && !isPhone) {
+          merchant = line.replace(/[^a-zA-Z0-9\s\&\'\.\-]/g, '').trim();
+          if (merchant.length > 3) break;
+        }
       }
+      if (merchant) setDescription(merchant);
 
-      // Amount regex
-      const amountMatch = text.match(/[\$\€\£\₹]?\s*(\d+[\.,]\d{2})/i);
-      if (amountMatch && amountMatch[1]) {
-        const extractedAmt = amountMatch[1].replace(',', '.');
+      // 2. Smart Amount Extraction (Total finding)
+      const amountRegex = /(\d{1,6}[\.,]\d{2})/g;
+      const allNumbers = text.match(amountRegex) || [];
+      const parsedNumbers = allNumbers.map(n => parseFloat(n.replace(',', '.')));
+      
+      // Heuristic: Look for keywords near numbers or take the largest number
+      const totalKeywords = ["TOTAL", "GRAND TOTAL", "AMOUNT DUE", "TOTAL DUE", "NET AMOUNT"];
+      const hasTotalKeyword = totalKeywords.some(k => text.toUpperCase().includes(k));
+      
+      if (parsedNumbers.length > 0) {
+        const maxAmt = Math.max(...parsedNumbers);
+        const extractedAmt = maxAmt.toString();
         setAmount(extractedAmt);
         handleAmountChange(extractedAmt);
-        toast.success("AI found amount: " + extractedAmt);
-      } else {
-        toast.info("Could not autodetect amount. Please verify.");
+        toast.success(`AI found Total: ${extractedAmt}`);
       }
 
-      // Date regex (simple mm/dd/yyyy or similar)
+      // 3. AI Category Classification (Keyword mapping)
+      const categoryMap: Record<string, string[]> = {
+        "Meals": ["REST", "CAFE", "FOOD", "COFFEE", "STARBUCKS", "MC DONALD", "BURGER", "EAT", "KITCHN", "PIZZA"],
+        "Travel": ["UBER", "LYFT", "TAXI", "FLIGHT", "AIR", "TRAIN", "RAIL", "PARKING", "SHELL", "GAS", "EXXON"],
+        "Software": ["AWS", "GOOGLE", "GITHUB", "HEROKU", "MICROSOFT", "AZURE", "SAAS", "DOMAINS"],
+        "Hardware": ["APPLE", "DELL", "ELECTRONICS", "BEST BUY", "IT ", "COMPUTER"],
+        "Office": ["STAPLES", "OFFICE", "AMAZON", "UPS", "FEDEX", "POST", "PAPER"]
+      };
+
+      const upperText = text.toUpperCase();
+      for (const [cat, keywords] of Object.entries(categoryMap)) {
+        if (keywords.some(k => upperText.includes(k))) {
+          setCategory(cat);
+          toast.success(`Classified as ${cat}`);
+          break;
+        }
+      }
+
+      // 4. Date regex
       const dateMatch = text.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
       if (dateMatch && !date) {
         const [, m, d, y] = dateMatch;
         const year = y.length === 2 ? `20${y}` : y;
         const formattedDate = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-        // Validate date isn't crazy
         if (!isNaN(new Date(formattedDate).getTime())) {
           setDate(formattedDate);
-          toast.success("AI found date: " + formattedDate);
         }
       }
     } catch (error) {

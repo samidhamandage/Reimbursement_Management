@@ -7,9 +7,11 @@ const ruleSchema = z.object({
   name: z.string().min(3),
   description: z.string().optional(),
   isActive: z.boolean().default(true),
+  enablePercentageRule: z.boolean().default(false),
   minApprovalPercentage: z.number().min(0).max(100).default(100),
+  enableSpecificRule: z.boolean().default(false),
+  specificApproverId: z.string().optional().nullable(),
   includeDirectManager: z.boolean().default(false),
-  overrideApproverId: z.string().optional().nullable(),
   steps: z.array(z.object({ order: z.number().int().positive(), userId: z.string() })).optional().default([]),
 });
 
@@ -55,7 +57,7 @@ export const createRule = async (req: AuthRequest, res: Response) => {
   const rule = await prisma.approvalRule.create({
     data: {
       ...ruleData,
-      overrideApproverId: ruleData.overrideApproverId ?? null,
+      specificApproverId: ruleData.specificApproverId ?? null,
       steps: { create: steps.map(({ order, userId }) => ({ order, userId })) },
     },
     include: { steps: { orderBy: { order: "asc" } } },
@@ -81,7 +83,7 @@ export const updateRule = async (req: AuthRequest, res: Response) => {
       where: { id },
       data: {
         ...ruleData,
-        overrideApproverId: ruleData.overrideApproverId ?? null,
+        specificApproverId: ruleData.specificApproverId ?? null,
         steps: { create: steps.map(({ order, userId }) => ({ order, userId })) },
       },
       include: { steps: { orderBy: { order: "asc" } } },

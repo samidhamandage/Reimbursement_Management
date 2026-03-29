@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { User, usersApi } from "@/lib/api";
+import { User, UserRole, usersApi } from "@/lib/api";
 import { Users, Plus, Pencil, Shield, BadgeCheck, User as UserIcon, Loader2 } from "lucide-react";
 
 export function AdminUsersList() {
@@ -45,9 +45,9 @@ export function AdminUsersList() {
     try {
       const data = await usersApi.list();
       setUsers(data.users);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch users:", error);
-      toast.error("Failed to load users");
+      toast.error(error.message || "Failed to load users");
     } finally {
       setIsLoading(false);
     }
@@ -91,9 +91,22 @@ export function AdminUsersList() {
   };
 
   const handleSave = async () => {
-    if (!name || !email || (!editingUser && !password)) {
-      toast.error("Please fill Name, Email and Password");
+    // Basic Client-Side Validations
+    if (name.length < 2) {
+      toast.error("Full Name must be at least 2 characters long.");
       return;
+    }
+    
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
+    if (!editingUser) {
+      if (password.length < 8) {
+        toast.error("Temporary Password must be at least 8 characters long.");
+        return;
+      }
     }
     
     setIsSubmitting(true);

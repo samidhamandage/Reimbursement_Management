@@ -44,6 +44,9 @@ model User {
   // Approval actions taken by this user
   approvalLogs ApprovalLog[]
 
+  // Rules where this user is the specific override
+  overrideRules ApprovalRule[] @relation("SpecificOverride")
+
   @@map("users")
 }
 
@@ -59,6 +62,7 @@ model Expense {
   ocrRawText      String?  // Store OCR extracted text for auditing
   status          String   @default("DRAFT") // DRAFT | WAITING_APPROVAL | APPROVED | REJECTED
   rejectionReason String?
+  approvalReason  String?  // e.g. "Approved via 60% threshold rule"
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -97,9 +101,16 @@ model ApprovalRule {
   name                  String   @unique
   description           String?
   isActive              Boolean  @default(true)
-  minApprovalPercentage Float    @default(100) // % of approvers that must approve
+  
+  // ── NEW FIELDS ──────────────────────────────────────
+  enablePercentageRule  Boolean  @default(false)
+  minApprovalPercentage Float    @default(100) // % of approvers that must approve (threshold)
+  
+  enableSpecificRule    Boolean  @default(false)
+  specificApproverId    String?  // The "CFO" or Specific user
+  specificApprover      User?    @relation("SpecificOverride", fields: [specificApproverId], references: [id])
+
   includeDirectManager  Boolean  @default(false) // Auto-add direct manager at step 1
-  overrideApproverId    String?  // If this user approves, immediately approved
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

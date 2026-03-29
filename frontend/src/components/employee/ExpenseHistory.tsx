@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -152,6 +153,21 @@ export function ExpenseHistory() {
               {selectedExpense?.description} - {selectedExpense?.currency} {selectedExpense?.amount.toFixed(2)}
             </DialogDescription>
           </DialogHeader>
+
+          {selectedExpense?.status === "WAITING_APPROVAL" && selectedExpense.rule && (
+            <div className="mt-4 px-4 space-y-2">
+              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                <span>Approval Progress</span>
+                <span>{selectedExpense.approvalLogs.length} / {(selectedExpense.rule.steps?.length || 0) + (selectedExpense.rule.includeDirectManager ? 1 : 0)} steps</span>
+              </div>
+              <Progress 
+                value={
+                  Math.min(((selectedExpense.approvalLogs.length) / ((selectedExpense.rule.steps?.length || 0) + (selectedExpense.rule.includeDirectManager ? 1 : 0))) * 100, 100)
+                } 
+                className="h-1.5"
+              />
+            </div>
+          )}
           
           <div className="py-4">
             {logs.length === 0 ? (
@@ -179,6 +195,16 @@ export function ExpenseHistory() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+            
+            {selectedExpense?.approvalReason && (
+              <div className="mt-6 p-3 rounded-lg bg-primary/5 border border-primary/10 flex gap-3 items-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <div className="flex-1">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Engine Decision</p>
+                  <p className="text-xs text-foreground/80 italic leading-snug">"{selectedExpense.approvalReason}"</p>
+                </div>
               </div>
             )}
             

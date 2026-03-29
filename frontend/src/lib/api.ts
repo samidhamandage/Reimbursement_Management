@@ -22,30 +22,46 @@ function getHeaders(extra?: Record<string, string>): HeadersInit {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    const error = new Error(body.error || `HTTP ${res.status}`) as any;
+    error.details = body.details; // Carry detail metadata for UI
+    throw error;
   }
   return res.json() as Promise<T>;
+}
+
+/**
+ * Enhanced fetch to catch network errors/unreachable backend specifically.
+ */
+async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    if (error instanceof TypeError && error.message.toLowerCase().includes("fetch")) {
+      throw new Error("Backend server is unreachable. Please ensure the backend is running on http://localhost:5000 and check CORS settings.");
+    }
+    throw error;
+  }
 }
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 
 export const authApi = {
   login: (email: string, password: string) =>
-    fetch(`${BASE_URL}/auth/login`, {
+    safeFetch(`${BASE_URL}/auth/login`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify({ email, password }),
     }).then(handleResponse<{ user: User; token: string }>),
 
   signup: (data: SignupPayload) =>
-    fetch(`${BASE_URL}/auth/signup`, {
+    safeFetch(`${BASE_URL}/auth/signup`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse<{ user: User; token: string }>),
 
   me: () =>
-    fetch(`${BASE_URL}/auth/me`, { headers: getHeaders() })
+    safeFetch(`${BASE_URL}/auth/me`, { headers: getHeaders() })
       .then(handleResponse<{ user: User }>),
 };
 
@@ -53,36 +69,36 @@ export const authApi = {
 
 export const expensesApi = {
   list: () =>
-    fetch(`${BASE_URL}/expenses`, { headers: getHeaders() })
+    safeFetch(`${BASE_URL}/expenses`, { headers: getHeaders() })
       .then(handleResponse<{ expenses: Expense[] }>),
 
   get: (id: string) =>
-    fetch(`${BASE_URL}/expenses/${id}`, { headers: getHeaders() })
+    safeFetch(`${BASE_URL}/expenses/${id}`, { headers: getHeaders() })
       .then(handleResponse<{ expense: Expense }>),
 
   create: (data: CreateExpensePayload) =>
-    fetch(`${BASE_URL}/expenses`, {
+    safeFetch(`${BASE_URL}/expenses`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse<{ expense: Expense }>),
 
   approve: (id: string, comment: string) =>
-    fetch(`${BASE_URL}/expenses/${id}/approve`, {
+    safeFetch(`${BASE_URL}/expenses/${id}/approve`, {
       method: "PATCH",
       headers: getHeaders(),
       body: JSON.stringify({ comment }),
     }).then(handleResponse<{ expense: Expense }>),
 
   reject: (id: string, comment: string) =>
-    fetch(`${BASE_URL}/expenses/${id}/reject`, {
+    safeFetch(`${BASE_URL}/expenses/${id}/reject`, {
       method: "PATCH",
       headers: getHeaders(),
       body: JSON.stringify({ comment }),
     }).then(handleResponse<{ expense: Expense }>),
 
   adminOverride: (id: string, status: "APPROVED" | "REJECTED", comment: string) =>
-    fetch(`${BASE_URL}/expenses/${id}/status`, {
+    safeFetch(`${BASE_URL}/expenses/${id}/status`, {
       method: "PATCH",
       headers: getHeaders(),
       body: JSON.stringify({ status, comment }),
@@ -93,25 +109,25 @@ export const expensesApi = {
 
 export const usersApi = {
   list: () =>
-    fetch(`${BASE_URL}/users`, { headers: getHeaders() })
+    safeFetch(`${BASE_URL}/users`, { headers: getHeaders() })
       .then(handleResponse<{ users: User[] }>),
 
   create: (data: CreateUserPayload) =>
-    fetch(`${BASE_URL}/users`, {
+    safeFetch(`${BASE_URL}/users`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse<{ user: User }>),
 
   update: (id: string, data: Partial<CreateUserPayload>) =>
-    fetch(`${BASE_URL}/users/${id}`, {
+    safeFetch(`${BASE_URL}/users/${id}`, {
       method: "PUT",
       headers: getHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse<{ user: User }>),
 
   delete: (id: string) =>
-    fetch(`${BASE_URL}/users/${id}`, {
+    safeFetch(`${BASE_URL}/users/${id}`, {
       method: "DELETE",
       headers: getHeaders(),
     }).then(handleResponse<{ message: string }>),
@@ -121,25 +137,25 @@ export const usersApi = {
 
 export const rulesApi = {
   list: () =>
-    fetch(`${BASE_URL}/rules`, { headers: getHeaders() })
+    safeFetch(`${BASE_URL}/rules`, { headers: getHeaders() })
       .then(handleResponse<{ rules: ApprovalRule[] }>),
 
   create: (data: CreateRulePayload) =>
-    fetch(`${BASE_URL}/rules`, {
+    safeFetch(`${BASE_URL}/rules`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse<{ rule: ApprovalRule }>),
 
   update: (id: string, data: CreateRulePayload) =>
-    fetch(`${BASE_URL}/rules/${id}`, {
+    safeFetch(`${BASE_URL}/rules/${id}`, {
       method: "PUT",
       headers: getHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse<{ rule: ApprovalRule }>),
 
   toggle: (id: string) =>
-    fetch(`${BASE_URL}/rules/${id}/toggle`, {
+    safeFetch(`${BASE_URL}/rules/${id}/toggle`, {
       method: "PATCH",
       headers: getHeaders(),
     }).then(handleResponse<{ rule: ApprovalRule }>),
@@ -182,9 +198,10 @@ export interface Expense {
   status: ExpenseStatus;
   rejectionReason?: string | null;
   createdAt: string;
-  employee: { id: string; name: string; email: string };
+  employee: { id: string; name: string; email: string; managerId?: string | null };
   approvalLogs: ApprovalLog[];
-  rule?: { id: string; name: string } | null;
+  rule?: { id: string; name: string; includeDirectManager: boolean; steps: { id: string }[] } | null;
+  approvalReason?: string | null;
 }
 
 export interface ApprovalStep {
@@ -198,9 +215,11 @@ export interface ApprovalRule {
   name: string;
   description?: string | null;
   isActive: boolean;
+  enablePercentageRule: boolean;
   minApprovalPercentage: number;
+  enableSpecificRule: boolean;
+  specificApproverId?: string | null;
   includeDirectManager: boolean;
-  overrideApproverId?: string | null;
   steps: ApprovalStep[];
 }
 
@@ -240,8 +259,10 @@ export interface CreateRulePayload {
   name: string;
   description?: string;
   isActive?: boolean;
+  enablePercentageRule?: boolean;
   minApprovalPercentage?: number;
+  enableSpecificRule?: boolean;
+  specificApproverId?: string | null;
   includeDirectManager?: boolean;
-  overrideApproverId?: string | null;
   steps: { order: number; userId: string }[];
 }

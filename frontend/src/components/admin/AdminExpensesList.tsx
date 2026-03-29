@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -30,8 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { MOCK_EXPENSES, Expense, MOCK_COMPANY_BASE_CURRENCY } from "@/lib/mock";
-import { Settings2, ArrowDownUp, CheckCircle2, Search, XCircle, MoreVertical } from "lucide-react";
+import { Expense, expensesApi } from "@/lib/api";
+import { Settings2, ArrowDownUp, CheckCircle2, Search, XCircle, MoreVertical, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,19 +41,41 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 
 export function AdminExpensesList() {
-  const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [overrideStatus, setOverrideStatus] = useState<"APPROVED" | "REJECTED" | null>(null);
   const [isOverriding, setIsOverriding] = useState(false);
 
+  useEffect(() => {
+    fetchExpenses();
+  }, []);
+
+  const fetchExpenses = async () => {
+    setIsLoading(true);
+    try {
+      const data = await expensesApi.list();
+      setExpenses(data.expenses);
+    } catch (error) {
+      console.error("Failed to fetch expenses:", error);
+      toast.error("Failed to load official expense ledger.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Filtering
   const filtered = expenses.filter(e => {
     if (statusFilter !== "ALL" && e.status !== statusFilter) return false;
-    if (search && !e.employee.toLowerCase().includes(search.toLowerCase()) && !e.description.toLowerCase().includes(search.toLowerCase())) return false;
+    const employeeName = e.employee.name.toLowerCase();
+    const description = e.description.toLowerCase();
+    const query = search.toLowerCase();
+    if (search && !employeeName.includes(query) && !description.includes(query)) return false;
     return true;
   });
 
@@ -63,19 +85,31 @@ export function AdminExpensesList() {
       case "WAITING_APPROVAL": return <Badge variant="outline" className="border-amber-500/50 text-amber-500 bg-amber-500/10">Pending</Badge>;
       case "APPROVED": return <Badge variant="default" className="bg-green-500/20 text-green-400 hover:bg-green-500/30">Approved</Badge>;
       case "REJECTED": return <Badge variant="destructive" className="bg-destructive/20 text-destructive-foreground">Rejected</Badge>;
-      default: return null;
+      default: return <Badge variant="outline">{status}</Badge>;
     }
+  };
+
+  const getProgress = (expense: any) => {
+    if (!expense.rule || expense.status === "APPROVED" || expense.status === "REJECTED") return null;
+    const total = (expense.rule.steps?.length || 0) + (expense.rule.includeDirectManager ? 1 : 0);
+    const current = expense.approvalLogs?.length || 0;
+    const percentage = total > 0 ? Math.min((current / total) * 100, 100) : 0;
+    
+    return { current, total, percentage };
   };
 
   const handleOverride = async () => {
     if (!overrideStatus || !selectedExpense) return;
     setIsOverriding(true);
     try {
-      await new Promise(r => setTimeout(r, 600));
-      setExpenses(prev => prev.map(e => e.id === selectedExpense.id ? { ...e, status: overrideStatus } : e));
-      toast.success("Expense forcefully overridden by ADMIN.");
+      await expensesApi.adminOverride(selectedExpense.id, overrideStatus, `Administrative Override to ${overrideStatus}`);
+      toast.success(`Expense forcefully ${overrideStatus.toLowerCase()} by ADMIN.`);
       setSelectedExpense(null);
       setOverrideStatus(null);
+      fetchExpenses(); // Refresh list to get latest status/logs
+    } catch (error) {
+       console.error("Override failed:", error);
+       toast.error("Administrative override failed. Check logs.");
     } finally {
       setIsOverriding(false);
     }
@@ -130,25 +164,44 @@ export function AdminExpensesList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-48 text-center text-muted-foreground">
-                    No matching expenses.
+                    <Loader2 className="w-10 h-10 mx-auto animate-spin opacity-20 mb-3" />
+                    Syncing with financial server...
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-48 text-center text-muted-foreground">
+                    No matching expenses found.
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map((expense) => (
                   <TableRow key={expense.id} className="hover:bg-muted/50 border-border group transition-all">
-                    <TableCell className="font-medium px-4 py-3">{expense.employee}</TableCell>
+                    <TableCell className="font-medium px-4 py-3">{expense.employee.name}</TableCell>
                     <TableCell>
                       <div className="font-medium">{expense.description}</div>
                       <div className="text-xs text-muted-foreground">{expense.category}</div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{format(new Date(expense.date), "MMM d, yyyy")}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium text-amber-500/90">
-                      ${expense.convertedAmount.toFixed(2)} {MOCK_COMPANY_BASE_CURRENCY}
+                      ${expense.convertedAmount.toFixed(2)} USD
                     </TableCell>
-                    <TableCell className="text-center">{getStatusBadge(expense.status)}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex flex-col items-center gap-1.5">
+                        {getStatusBadge(expense.status)}
+                        {getProgress(expense) && (
+                          <div className="w-full max-w-[80px] space-y-1">
+                            <Progress value={getProgress(expense)?.percentage} className="h-1 bg-white/5" />
+                            <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                              {getProgress(expense)?.current}/{getProgress(expense)?.total} steps
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right px-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 p-0">
@@ -187,7 +240,7 @@ export function AdminExpensesList() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 font-medium text-center">
-            You are about to forcefully <span className={overrideStatus === "APPROVED" ? "text-green-500 uppercase" : "text-destructive uppercase"}>{overrideStatus?.toLowerCase()}</span> {selectedExpense?.employee}'s expense for ${selectedExpense?.convertedAmount.toFixed(2)}.
+            You are about to forcefully <span className={overrideStatus === "APPROVED" ? "text-green-500 uppercase" : "text-destructive uppercase"}>{overrideStatus?.toLowerCase()}</span> {selectedExpense?.employee.name}'s expense for ${selectedExpense?.convertedAmount.toFixed(2)}.
           </div>
           <DialogFooter>
              <Button variant="ghost" onClick={() => setOverrideStatus(null)}>Cancel</Button>
