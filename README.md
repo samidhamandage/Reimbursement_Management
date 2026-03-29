@@ -6,7 +6,7 @@ AI-powered reimbursement management system with OCR and fraud detection.
 Manual expense reimbursements are prone to fraud, manual entry errors, and slow approval cycles. Companies lose millions due to duplicate claims or exaggerated amounts.
 
 ## Solution
-SERMS uses AI-based OCR (Tesseract) to extract data from receipts, automatically validates it against company rules, and provides real-time tracking via Socket.IO for both employees and managers.
+SERMS uses AI-based OCR (Tesseract) to extract data from receipts, automatically validates it against company rules, and provides real-time tracking via Socket.IO for both employees and manager.
 
 ## Features
 - **Upload Receipt**: Drag and drop receipt(only image).
